@@ -1,3 +1,5 @@
+const { response } = require("express");
+
 const FILES_TO_CACHE = [
   '/',
   '/index.html',
@@ -8,21 +10,21 @@ const FILES_TO_CACHE = [
   'https://stackpath.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css',
 ];
 
-const PRECACHE = 'precache-v1';
+const CACHE = 'cache-v1';
+const DATACACHE = 'datacache-v1';
 const RUNTIME = 'runtime';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
-      .open(PRECACHE)
+      .open(CACHE)
       .then((cache) => cache.addAll(FILES_TO_CACHE))
       .then(self.skipWaiting())
   );
 });
 
-// The activate handler takes care of cleaning up old caches.
 self.addEventListener('activate', (event) => {
-  const currentCaches = [PRECACHE, RUNTIME];
+  const currentCaches = [CACHE, DATACACHE, RUNTIME];
   event.waitUntil(
     caches
       .keys()
@@ -41,21 +43,24 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.url.startsWith(self.location.origin)) {
+  if (event.request.url.includes('/api/')) {
     event.respondWith(
-      caches.match(event.request).then((cachedResponse) => {
-        if (cachedResponse) {
-          return cachedResponse;
-        }
-
-        return caches.open(RUNTIME).then((cache) => {
-          return fetch(event.request).then((response) => {
-            return cache.put(event.request, response.clone()).then(() => {
-              return response;
-            });
+      caches.open(DATACACHE).then((cache) => {
+        return fetch(event.request).then((response) => {
+          return cache.put(event.request, response.clone()).then(() => {
+            return response;
           });
-        });
+        }).catch(() => {
+          return cache.match(event.request)
+        })
+      }))};
+     event.respondWith(
+      caches.open(CACHE).then((cache) => {
+        return cache.match(event.request).then(response => {
+          return response || fetch(event.request)
+        })
+
+        
       })
     );
-  }
-});
+  })
